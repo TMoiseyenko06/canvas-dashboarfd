@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,6 @@ import httpx
 from dotenv import load_dotenv, set_key
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -154,7 +154,8 @@ def _get_wiggle():
 def startup():
     database.init_db()
     load_dotenv(ENV_PATH, override=True)
-    _sync_canvas()
+    # Run initial sync in background so uvicorn serves requests immediately
+    threading.Thread(target=_sync_canvas, daemon=True).start()
     scheduler.start_scheduler(_sync_canvas)
 
 

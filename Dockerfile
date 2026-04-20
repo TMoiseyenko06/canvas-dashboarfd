@@ -39,9 +39,9 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 RUN rm -f /etc/nginx/sites-enabled/default
 COPY --from=frontend-builder /frontend/dist /usr/share/nginx/html
 
-# supervisor config
-COPY supervisord.conf /etc/supervisor/conf.d/dashboard.conf
+# Use our supervisord.conf directly as the entry point config
+COPY supervisord.conf /etc/supervisord.conf
 
 EXPOSE 80
 
-CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]
+CMD ["supervisord", "-c", "/etc/supervisord.conf"]
