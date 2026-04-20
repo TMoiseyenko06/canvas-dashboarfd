@@ -35,6 +35,11 @@ def init_db():
             key TEXT PRIMARY KEY,
             value TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS hidden_courses (
+            course_id INTEGER PRIMARY KEY,
+            hidden_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     conn.commit()
     conn.close()
@@ -91,6 +96,29 @@ def clear_cache():
     conn.execute("DELETE FROM estimate_cache")
     conn.commit()
     conn.close()
+
+
+def hide_course(course_id: int):
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR IGNORE INTO hidden_courses (course_id) VALUES (?)", (course_id,)
+    )
+    conn.commit()
+    conn.close()
+
+
+def unhide_course(course_id: int):
+    conn = get_conn()
+    conn.execute("DELETE FROM hidden_courses WHERE course_id = ?", (course_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_hidden_course_ids() -> set[int]:
+    conn = get_conn()
+    rows = conn.execute("SELECT course_id FROM hidden_courses").fetchall()
+    conn.close()
+    return {r["course_id"] for r in rows}
 
 
 def get_setting(key: str):

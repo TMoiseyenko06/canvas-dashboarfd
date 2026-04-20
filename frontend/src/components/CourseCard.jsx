@@ -9,28 +9,17 @@ const COLORS = [
   'border-red-500',
 ]
 
-export function courseColor(index) {
-  return COLORS[index % COLORS.length]
-}
-
-export const COURSE_BG = [
-  'bg-blue-500',
-  'bg-green-500',
-  'bg-purple-500',
-  'bg-pink-500',
-  'bg-yellow-500',
-  'bg-orange-500',
-  'bg-teal-500',
-  'bg-red-500',
-]
-
-export default function CourseCard({ course, index }) {
+export default function CourseCard({ course, index, onHide }) {
   const borderColor = COLORS[index % COLORS.length]
 
-  const score = course.current_score ?? course.final_score
-  const grade = course.current_grade ?? course.final_grade
+  // Prefer our calculated grade (past-due only); fall back to Canvas reported
+  const calcScore = course.calculated_score
+  const canvasScore = course.current_score ?? course.final_score
+  const canvasGrade = course.current_grade ?? course.final_grade
 
-  const scoreNum = score !== null && score !== undefined ? Number(score) : null
+  const displayScore = calcScore ?? canvasScore
+  const scoreNum = displayScore !== null && displayScore !== undefined ? Number(displayScore) : null
+
   const scoreColor =
     scoreNum === null ? 'text-gray-400' :
     scoreNum >= 90 ? 'text-green-600' :
@@ -39,23 +28,45 @@ export default function CourseCard({ course, index }) {
     'text-red-600'
 
   return (
-    <div className={`bg-white rounded-xl shadow-sm border-l-4 ${borderColor} p-5`}>
-      <div className="flex items-start justify-between">
-        <div>
+    <div className={`bg-white rounded-xl shadow-sm border-l-4 ${borderColor} p-5 relative group`}>
+      {/* Hide button */}
+      <button
+        onClick={() => onHide(course.id)}
+        title="Hide this course"
+        className="absolute top-3 right-3 text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity text-lg leading-none"
+        aria-label="Hide course"
+      >
+        ✕
+      </button>
+
+      <div className="flex items-start justify-between pr-5">
+        <div className="min-w-0">
           <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{course.course_code}</p>
           <h3 className="font-semibold text-gray-800 mt-0.5 leading-snug">{course.name}</h3>
         </div>
-        <div className="text-right ml-4">
+        <div className="text-right ml-4 shrink-0">
           {scoreNum !== null ? (
             <>
               <p className={`text-2xl font-bold ${scoreColor}`}>{scoreNum.toFixed(1)}%</p>
-              {grade && <p className="text-sm text-gray-500">{grade}</p>}
+              {calcScore != null ? (
+                <p className="text-xs text-gray-400">earned so far</p>
+              ) : canvasGrade ? (
+                <p className="text-sm text-gray-500">{canvasGrade}</p>
+              ) : null}
             </>
           ) : (
             <p className="text-sm text-gray-400 italic">Grade N/A</p>
           )}
         </div>
       </div>
+
+      {/* Show both scores when we have a calculated one */}
+      {calcScore != null && canvasScore != null && calcScore !== canvasScore && (
+        <p className="text-xs text-gray-400 mt-1">
+          Canvas reports {Number(canvasScore).toFixed(1)}%
+          {canvasGrade ? ` (${canvasGrade})` : ''}
+        </p>
+      )}
 
       {course.assignment_groups?.length > 0 && (
         <div className="mt-3 pt-3 border-t border-gray-100">

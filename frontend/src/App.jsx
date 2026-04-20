@@ -80,6 +80,13 @@ export default function App() {
     prevSyncing.current = syncing
   }, [syncing, reloadCourses, reloadAssignments, reloadAlerts])
 
+  async function handleHide(courseId) {
+    await fetch(`/api/courses/${courseId}/hide`, { method: 'POST' })
+    await reloadCourses()
+    await reloadAssignments()
+    await reloadAlerts()
+  }
+
   async function handleOverride(assignmentId, hours) {
     await fetch('/api/estimates/override', {
       method: 'POST',
@@ -170,7 +177,7 @@ export default function App() {
                   </div>
                 )}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {courses?.map((c, i) => <CourseCard key={c.id} course={c} index={i} />)}
+                  {courses?.map((c, i) => <CourseCard key={c.id} course={c} index={i} onHide={handleHide} />)}
                 </div>
               </div>
             )}

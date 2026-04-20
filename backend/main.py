@@ -114,16 +114,16 @@ def _sync_canvas():
             })
 
             # assignments
+            course_assignments = []
             try:
-                assignments = canvas_client.get_assignments(cid)
-                for a in assignments:
+                raw_assignments = canvas_client.get_assignments(cid)
+                for a in raw_assignments:
                     sub = a.get("submission") or {}
                     submitted = sub.get("workflow_state") not in (None, "unsubmitted")
                     a_hash = _assignment_hash(a)
                     cached = database.get_estimate(a["id"])
                     override = database.get_override(a["id"])
 
-                    # fetch AI estimate if needed
                     if override:
                         estimated_hours = override["hours"]
                         source = "manual"
@@ -140,7 +140,7 @@ def _sync_canvas():
                         source = "ai" if hours is not None else "unknown"
                         database.set_estimate(a["id"], hours, a_hash, source)
 
-                    all_assignments.append({
+                    entry = {
                         "id": a["id"],
                         "course_id": cid,
                         "course_name": cname,
@@ -150,12 +150,19 @@ def _sync_canvas():
                         "points_possible": a.get("points_possible"),
                         "submitted": submitted,
                         "submission_state": sub.get("workflow_state"),
+                        "score": sub.get("score"),
                         "estimated_hours": estimated_hours,
                         "estimate_source": source,
                         "html_url": a.get("html_url", ""),
-                    })
-            except Exception as exc:
+                    }
+                    course_assignments.append(entry)
+                    all_assignments.append(entry)
+            except Exception:
                 pass
+
+            # Calculate grade from past-due graded assignments only
+            calculated_score = _calc_grade(course_assignments)
+            enriched_courses[-1]["calculated_score"] = calculated_score
 
         _course_cache = enriched_courses
         _assignment_cache = all_assignments
@@ -163,6 +170,34 @@ def _sync_canvas():
         _last_sync_error = str(exc)
     finally:
         _syncing = False
+
+
+def _calc_grade(assignments: list[dict]) -> float | None:
+    """
+    Return a percentage score calculated only from assignments whose due date
+    has already passed AND that have a numeric score from Canvas.
+    """
+    now = datetime.now(timezone.utc)
+    earned = 0.0
+    possible = 0.0
+    for a in assignments:
+        due_str = a.get("due_at")
+        if not due_str:
+            continue
+        try:
+            due = datetime.fromisoformat(due_str.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if due > now:
+            continue  # skip upcoming assignments
+        pts = a.get("points_possible")
+        score = a.get("score")
+        if pts and pts > 0 and score is not None:
+            earned += float(score)
+            possible += float(pts)
+    if possible == 0:
+        return None
+    return round(earned / possible * 100, 1)
 
 
 def _get_wiggle():
@@ -200,20 +235,43 @@ def status():
 
 @app.get("/api/courses")
 def get_courses():
-    return _course_cache
+    hidden = database.get_hidden_course_ids()
+    return [c for c in _course_cache if c["id"] not in hidden]
+
+
+@app.get("/api/courses/hidden")
+def get_hidden_courses():
+    hidden = database.get_hidden_course_ids()
+    return [c for c in _course_cache if c["id"] in hidden]
+
+
+@app.post("/api/courses/{course_id}/hide")
+def hide_course(course_id: int):
+    database.hide_course(course_id)
+    return {"status": "ok"}
+
+
+@app.delete("/api/courses/{course_id}/hide")
+def unhide_course(course_id: int):
+    database.unhide_course(course_id)
+    return {"status": "ok"}
 
 
 @app.get("/api/assignments")
 def get_assignments():
-    return _assignment_cache
+    hidden = database.get_hidden_course_ids()
+    return [a for a in _assignment_cache if a["course_id"] not in hidden]
 
 
 @app.get("/api/alerts")
 def get_alerts():
+    hidden = database.get_hidden_course_ids()
     wiggle = _get_wiggle()
     now = datetime.now(timezone.utc)
     alerts = []
     for a in _assignment_cache:
+        if a.get("course_id") in hidden:
+            continue
         if a.get("submitted"):
             continue
         due_str = a.get("due_at")

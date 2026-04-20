@@ -10,6 +10,16 @@ export default function Settings() {
   const [status, setStatus] = useState(null)
   const [clearing, setClearing] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [hiddenCourses, setHiddenCourses] = useState([])
+
+  useEffect(() => {
+    fetch('/api/courses/hidden').then(r => r.json()).then(setHiddenCourses).catch(() => {})
+  }, [])
+
+  async function unhide(courseId) {
+    await fetch(`/api/courses/${courseId}/hide`, { method: 'DELETE' })
+    setHiddenCourses(h => h.filter(c => c.id !== courseId))
+  }
 
   useEffect(() => {
     fetch('/api/settings')
@@ -141,6 +151,25 @@ export default function Settings() {
           </button>
         </div>
       </div>
+
+      {hiddenCourses.length > 0 && (
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <h3 className="text-sm font-medium text-gray-700 mb-3">Hidden Courses</h3>
+          <div className="space-y-2">
+            {hiddenCourses.map(c => (
+              <div key={c.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                <span className="text-sm text-gray-700">{c.name}</span>
+                <button
+                  onClick={() => unhide(c.id)}
+                  className="text-xs text-blue-600 hover:underline"
+                >
+                  Unhide
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {status && (
         <div className={`mt-4 p-3 rounded-lg text-sm ${status.ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
