@@ -1,6 +1,5 @@
 import httpx
 import os
-from typing import Any
 
 
 def _get_config():
@@ -15,7 +14,6 @@ def _headers():
 
 
 def _paginate(url: str, params: dict = None) -> list[dict]:
-    base_url, _ = _get_config()
     results = []
     next_url = url
     with httpx.Client(headers=_headers(), timeout=30) as client:
@@ -43,29 +41,34 @@ def _parse_link_header(link_header: str) -> dict:
             url = parts[0].strip().strip("<>")
             rel = parts[1].strip()
             if rel.startswith('rel="') and rel.endswith('"'):
-                rel_name = rel[5:-1]
-                links[rel_name] = url
+                links[rel[5:-1]] = url
     return links
 
 
 def get_courses() -> list[dict]:
     base_url, _ = _get_config()
+    # include[]=total_scores returns grade info inside each course's enrollments array
+    # Don't filter by enrollment_state — let workflow_state handle exclusions
     courses = _paginate(
         f"{base_url}/api/v1/courses",
-        params={"enrollment_state": "active", "include[]": ["total_scores", "current_grading_period_scores"]},
+        params=[
+            ("enrollment_type[]", "student"),
+            ("include[]", "total_scores"),
+            ("include[]", "current_grading_period_scores"),
+            ("per_page", "50"),
+        ],
     )
-    active = []
-    for c in courses:
-        if isinstance(c, dict) and c.get("workflow_state") not in ("completed", "deleted"):
-            active.append(c)
-    return active
+    return [
+        c for c in courses
+        if isinstance(c, dict) and c.get("workflow_state") not in ("completed", "deleted")
+    ]
 
 
 def get_assignment_groups(course_id: int) -> list[dict]:
     base_url, _ = _get_config()
     return _paginate(
         f"{base_url}/api/v1/courses/{course_id}/assignment_groups",
-        params={"include[]": ["assignments"]},
+        params=[("include[]", "assignments")],
     )
 
 
@@ -73,16 +76,9 @@ def get_assignments(course_id: int) -> list[dict]:
     base_url, _ = _get_config()
     return _paginate(
         f"{base_url}/api/v1/courses/{course_id}/assignments",
-        params={
-            "include[]": ["submission"],
-            "order_by": "due_at",
-        },
-    )
-
-
-def get_enrollments(course_id: int) -> list[dict]:
-    base_url, _ = _get_config()
-    return _paginate(
-        f"{base_url}/api/v1/courses/{course_id}/enrollments",
-        params={"type[]": "StudentEnrollment", "include[]": ["current_grading_period_scores"]},
+        params=[
+            ("include[]", "submission"),
+            ("order_by", "due_at"),
+            ("per_page", "50"),
+        ],
     )

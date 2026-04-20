@@ -31,6 +31,8 @@ ENV_PATH = Path(__file__).parent.parent / ".env"
 # ── in-memory assignment cache (refreshed by scheduler) ──────────────────────
 _assignment_cache: list[dict] = []
 _course_cache: list[dict] = []
+_syncing: bool = False
+_last_sync_error: str = ""
 
 
 def _assignment_hash(a: dict) -> str:
@@ -45,7 +47,9 @@ def _strip_html(text: str) -> str:
 
 
 def _sync_canvas():
-    global _assignment_cache, _course_cache
+    global _assignment_cache, _course_cache, _syncing, _last_sync_error
+    _syncing = True
+    _last_sync_error = ""
     try:
         courses = canvas_client.get_courses()
         enriched_courses = []
@@ -55,21 +59,18 @@ def _sync_canvas():
             cid = course["id"]
             cname = course.get("name", f"Course {cid}")
 
-            # grade info lives in enrollments
-            grade_info = {"current_grade": None, "current_score": None}
-            try:
-                enrollments = canvas_client.get_enrollments(cid)
-                for e in enrollments:
-                    g = e.get("grades", {})
-                    grade_info = {
-                        "current_grade": g.get("current_grade"),
-                        "current_score": g.get("current_score"),
-                        "final_grade": g.get("final_grade"),
-                        "final_score": g.get("final_score"),
-                    }
-                    break
-            except Exception:
-                pass
+            # Canvas returns grade info inside the course's enrollments[] array
+            # when include[]=total_scores is requested
+            grade_info = {"current_grade": None, "current_score": None,
+                          "final_grade": None, "final_score": None}
+            for e in course.get("enrollments", []):
+                grade_info = {
+                    "current_grade": e.get("computed_current_grade"),
+                    "current_score": e.get("computed_current_score"),
+                    "final_grade": e.get("computed_final_grade"),
+                    "final_score": e.get("computed_final_score"),
+                }
+                break
 
             # assignment groups (weights)
             groups = []
@@ -140,7 +141,9 @@ def _sync_canvas():
         _course_cache = enriched_courses
         _assignment_cache = all_assignments
     except Exception as exc:
-        pass
+        _last_sync_error = str(exc)
+    finally:
+        _syncing = False
 
 
 def _get_wiggle():
@@ -165,6 +168,16 @@ def shutdown():
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/status")
+def status():
+    return {
+        "syncing": _syncing,
+        "courses": len(_course_cache),
+        "assignments": len(_assignment_cache),
+        "last_sync_error": _last_sync_error,
+    }
+
 
 @app.get("/api/courses")
 def get_courses():
