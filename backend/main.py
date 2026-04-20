@@ -294,3 +294,9 @@ def clear_cache():
 def manual_sync():
     _sync_canvas()
     return {"status": "ok", "assignments": len(_assignment_cache), "courses": len(_course_cache)}
+
+
+@app.get("/api/debug/canvas")
+def debug_canvas():
+    """Raw Canvas API responses — use this to diagnose connection issues."""
+    return canvas_client.debug_raw_courses()

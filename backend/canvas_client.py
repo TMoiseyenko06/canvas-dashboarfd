@@ -47,14 +47,15 @@ def _parse_link_header(link_header: str) -> dict:
 
 def get_courses() -> list[dict]:
     """
-    Fetch active student courses. Tries with total_scores include first;
-    falls back to plain list if Canvas returns a 5xx (some instances choke
-    on certain include[] combinations).
+    Fetch courses the user is enrolled in. Uses progressively simpler requests
+    because some Canvas instances 500 on include[] params.
     """
     base_url, _ = _get_config()
     attempts = [
-        [("enrollment_type[]", "student"), ("include[]", "total_scores"), ("per_page", "50")],
-        [("enrollment_type[]", "student"), ("per_page", "50")],
+        # Try with grade info inline
+        [("include[]", "total_scores"), ("per_page", "50")],
+        # Bare minimum — just list courses, grades fetched separately
+        [("per_page", "50")],
     ]
     last_exc = None
     for params in attempts:
@@ -62,7 +63,8 @@ def get_courses() -> list[dict]:
             courses = _paginate(f"{base_url}/api/v1/courses", params=params)
             return [
                 c for c in courses
-                if isinstance(c, dict) and c.get("workflow_state") not in ("completed", "deleted")
+                if isinstance(c, dict)
+                and c.get("workflow_state") not in ("completed", "deleted")
             ]
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code >= 500:
@@ -74,8 +76,9 @@ def get_courses() -> list[dict]:
 
 def get_self_enrollments() -> list[dict]:
     """
-    All of the current user's student enrollments, including grade info.
-    Canvas returns grades under enrollment['grades']['current_score'] etc.
+    All of the current user's student enrollments with grade info.
+    Returns enrollment objects with a 'grades' key containing
+    current_score, current_grade, final_score, final_grade.
     """
     base_url, _ = _get_config()
     return _paginate(
@@ -102,3 +105,20 @@ def get_assignments(course_id: int) -> list[dict]:
             ("per_page", "50"),
         ],
     )
+
+
+def debug_raw_courses() -> dict:
+    """Returns raw API response for diagnosing Canvas issues."""
+    base_url, _ = _get_config()
+    results = {}
+    with httpx.Client(headers=_headers(), timeout=30) as client:
+        for label, params in [
+            ("with_total_scores", [("include[]", "total_scores"), ("per_page", "5")]),
+            ("bare", [("per_page", "5")]),
+        ]:
+            try:
+                resp = client.get(f"{base_url}/api/v1/courses", params=params)
+                results[label] = {"status": resp.status_code, "body": resp.json()}
+            except Exception as exc:
+                results[label] = {"error": str(exc)}
+    return results
