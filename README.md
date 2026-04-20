@@ -14,8 +14,8 @@ A full-stack student dashboard for Canvas LMS with AI-powered time estimates, sm
 
 ## Prerequisites
 
-- Python 3.10+
-- Node.js 18+
+- Docker + Docker Compose (recommended — single container, no local deps needed)
+- _Or_ Python 3.10+ and Node.js 18+ for running locally
 - A Canvas LMS account with API access
 - An OpenRouter account
 
@@ -39,9 +39,11 @@ A full-stack student dashboard for Canvas LMS with AI-powered time estimates, sm
 
 ---
 
-## Setup
+## Docker Setup (recommended)
 
-### 1. Clone & configure environment
+Everything — FastAPI backend, nginx-served React frontend, and a Cloudflare quick tunnel — runs inside **one container** managed by `supervisord`.
+
+### 1. Configure `.env`
 
 ```bash
 git clone <repo-url>
@@ -58,17 +60,39 @@ OPENROUTER_API_KEY=your_openrouter_key_here
 WIGGLE_ROOM_HOURS=2
 ```
 
-### 2. Backend
+### 2. Build & run
 
 ```bash
-cd canvas-dashboard
+docker compose up --build
+```
+
+That's it. On startup you'll see a line like:
+
+```
+cloudflared  | +--------------------------------------------------------------------------------------------+
+cloudflared  | |  Your quick Tunnel has been created! Visit it at (it may take a minute to be usable):     |
+cloudflared  | |  https://some-random-words.trycloudflare.com                                              |
+cloudflared  | +--------------------------------------------------------------------------------------------+
+```
+
+Open that `trycloudflare.com` URL in any browser — no port forwarding, no account required.
+
+The app is also available locally at `http://localhost:8080`.
+
+> **Tunnel note:** The quick tunnel URL changes each time the container restarts. For a stable URL you need a free Cloudflare account and a named tunnel (see Cloudflare docs).
+
+---
+
+## Local Dev Setup (without Docker)
+
+### Backend
+
+```bash
 pip install -r requirements.txt
 uvicorn backend.main:app --reload
 ```
 
-The API will be available at `http://localhost:8000`.
-
-### 3. Frontend
+### Frontend
 
 ```bash
 cd frontend
@@ -76,7 +100,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173` in your browser.
+Open `http://localhost:5173`. Vite proxies `/api` to `localhost:8000`.
 
 ---
 

@@ -1,0 +1,13 @@
+services:
+  dashboard:
+    build: .
+    env_file: .env
+    volumes:
+      - db_data:/app/data
+    restart: unless-stopped
+    # Port 80 exposed locally too — handy for debugging without the tunnel
+    ports:
+      - "8080:80"
+
+volumes:
+  db_data:
