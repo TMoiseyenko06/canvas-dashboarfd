@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Database & data
+data/
+
+# Secrets — do NOT commit real tokens
+# .env is committed with placeholder values so the structure is clear
+# If you have a .env.local with real tokens, keep it here:
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db

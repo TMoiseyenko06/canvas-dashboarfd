@@ -1,0 +1,14 @@
+from pydantic import BaseModel
+from typing import Optional
+
+
+class EstimateOverride(BaseModel):
+    assignment_id: int
+    hours: float
+
+
+class SettingsUpdate(BaseModel):
+    canvas_base_url: Optional[str] = None
+    canvas_api_token: Optional[str] = None
+    openrouter_api_key: Optional[str] = None
+    wiggle_room_hours: Optional[float] = None
