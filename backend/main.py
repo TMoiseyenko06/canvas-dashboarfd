@@ -52,6 +52,23 @@ def _sync_canvas():
     _last_sync_error = ""
     try:
         courses = canvas_client.get_courses()
+
+        # Fetch all grades in one call via /users/self/enrollments
+        grade_map: dict[int, dict] = {}
+        try:
+            for e in canvas_client.get_self_enrollments():
+                cid = e.get("course_id")
+                if cid and cid not in grade_map:
+                    g = e.get("grades", {})
+                    grade_map[cid] = {
+                        "current_grade": g.get("current_grade"),
+                        "current_score": g.get("current_score"),
+                        "final_grade": g.get("final_grade"),
+                        "final_score": g.get("final_score"),
+                    }
+        except Exception:
+            pass
+
         enriched_courses = []
         all_assignments = []
 
@@ -59,17 +76,19 @@ def _sync_canvas():
             cid = course["id"]
             cname = course.get("name", f"Course {cid}")
 
-            # Canvas returns grade info inside the course's enrollments[] array
-            # when include[]=total_scores is requested
-            grade_info = {"current_grade": None, "current_score": None,
-                          "final_grade": None, "final_score": None}
+            # Prefer separate enrollment grades; fall back to inline if present
+            grade_info = grade_map.get(cid, {
+                "current_grade": None, "current_score": None,
+                "final_grade": None, "final_score": None,
+            })
             for e in course.get("enrollments", []):
-                grade_info = {
-                    "current_grade": e.get("computed_current_grade"),
-                    "current_score": e.get("computed_current_score"),
-                    "final_grade": e.get("computed_final_grade"),
-                    "final_score": e.get("computed_final_score"),
-                }
+                if grade_info["current_score"] is None:
+                    grade_info = {
+                        "current_grade": e.get("computed_current_grade"),
+                        "current_score": e.get("computed_current_score"),
+                        "final_grade": e.get("computed_final_grade"),
+                        "final_score": e.get("computed_final_score"),
+                    }
                 break
 
             # assignment groups (weights)
