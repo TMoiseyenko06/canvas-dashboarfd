@@ -127,18 +127,23 @@ def _sync_canvas():
                     if override:
                         estimated_hours = override["hours"]
                         source = "manual"
-                    elif cached and cached["assignment_hash"] == a_hash:
+                    elif cached and cached["assignment_hash"] == a_hash and cached["hours"] is not None:
                         estimated_hours = cached["hours"]
                         source = cached.get("source", "ai")
                     else:
-                        hours = openrouter_client.estimate_hours(
+                        hours, err = openrouter_client.estimate_hours(
                             a.get("name", ""),
                             _strip_html(a.get("description", "")),
                             a.get("points_possible") or 0,
                         )
-                        estimated_hours = hours
-                        source = "ai" if hours is not None else "unknown"
-                        database.set_estimate(a["id"], hours, a_hash, source)
+                        if hours is not None:
+                            estimated_hours = hours
+                            source = "ai"
+                            database.set_estimate(a["id"], hours, a_hash, "ai")
+                        else:
+                            estimated_hours = None
+                            source = "unknown"
+                            # Don't cache failures — retry on next sync
 
                     entry = {
                         "id": a["id"],
@@ -350,11 +355,15 @@ def clear_cache():
 
 @app.post("/api/sync")
 def manual_sync():
-    _sync_canvas()
-    return {"status": "ok", "assignments": len(_assignment_cache), "courses": len(_course_cache)}
+    threading.Thread(target=_sync_canvas, daemon=True).start()
+    return {"status": "ok", "message": "Sync started in background"}
 
 
 @app.get("/api/debug/canvas")
 def debug_canvas():
-    """Raw Canvas API responses — use this to diagnose connection issues."""
     return canvas_client.debug_raw_courses()
+
+
+@app.get("/api/debug/openrouter")
+def debug_openrouter():
+    return openrouter_client.test_connection()
