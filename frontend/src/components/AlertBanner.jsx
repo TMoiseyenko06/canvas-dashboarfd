@@ -2,17 +2,15 @@ import { useEffect, useState } from 'react'
 import { formatDistanceToNow, parseISO } from 'date-fns'
 
 const URGENCY_STYLES = {
-  overdue: 'bg-red-600 text-white',
   alert_active: 'bg-orange-500 text-white',
   within_24h: 'bg-yellow-400 text-gray-900',
   within_72h: 'bg-blue-100 text-blue-900 border border-blue-300',
 }
 
 const URGENCY_LABEL = {
-  overdue: '🔴 Overdue',
-  alert_active: '🟠 Alert Active',
+  alert_active: '🟠 Start now — due soon',
   within_24h: '🟡 Due within 24h',
-  within_72h: '🔵 Due within 72h',
+  within_72h: '🔵 Due within 3 days',
 }
 
 export default function AlertBanner({ alerts }) {

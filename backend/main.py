@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from backend import canvas_client, openrouter_client, database, scheduler
+from backend import canvas_client, openrouter_client, database, scheduler, telegram_client
 from backend.models import EstimateOverride, SettingsUpdate
 
 app = FastAPI(title="Canvas Dashboard API")
@@ -205,6 +205,46 @@ def _calc_grade(assignments: list[dict]) -> float | None:
     return round(earned / possible * 100, 1)
 
 
+def _check_and_notify():
+    """Send Telegram alerts for assignments entering their alert window."""
+    hidden = database.get_hidden_course_ids()
+    wiggle = _get_wiggle()
+    now = datetime.now(timezone.utc)
+    urgency_order = {"within_72h": 0, "within_24h": 1, "alert_active": 2}
+
+    for a in _assignment_cache:
+        if a.get("course_id") in hidden or a.get("submitted"):
+            continue
+        due_str = a.get("due_at")
+        if not due_str:
+            continue
+        try:
+            due = datetime.fromisoformat(due_str.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+
+        now_ts = now.timestamp()
+        due_ts = due.timestamp()
+
+        if now_ts > due_ts or due_ts - now_ts > 72 * 3600:
+            continue
+
+        hours = a.get("estimated_hours") or 0
+        alert_time = due_ts - (hours + wiggle) * 3600
+
+        if now_ts >= alert_time:
+            urgency = "alert_active"
+        elif due_ts - now_ts <= 24 * 3600:
+            urgency = "within_24h"
+        else:
+            urgency = "within_72h"
+
+        if not database.was_telegram_sent(a["id"], urgency):
+            ok, err = telegram_client.send_alert(a, urgency)
+            if ok:
+                database.mark_telegram_sent(a["id"], urgency)
+
+
 def _get_wiggle():
     db_val = database.get_setting("wiggle_room_hours")
     if db_val is not None:
@@ -218,7 +258,7 @@ def startup():
     load_dotenv(ENV_PATH, override=True)
     # Run initial sync in background so uvicorn serves requests immediately
     threading.Thread(target=_sync_canvas, daemon=True).start()
-    scheduler.start_scheduler(_sync_canvas)
+    scheduler.start_scheduler(_sync_canvas, _check_and_notify)
 
 
 @app.on_event("shutdown")
@@ -293,15 +333,15 @@ def get_alerts():
         due_ts = due.timestamp()
 
         if now_ts > due_ts:
-            urgency = "overdue"
+            continue  # already overdue — skip
+        elif due_ts - now_ts > 72 * 3600:
+            continue  # more than 3 days away — skip
         elif now_ts >= alert_time:
             urgency = "alert_active"
         elif due_ts - now_ts <= 24 * 3600:
             urgency = "within_24h"
-        elif due_ts - now_ts <= 72 * 3600:
-            urgency = "within_72h"
         else:
-            continue  # not urgent yet
+            urgency = "within_72h"
 
         alerts.append({**a, "urgency": urgency, "alert_time": datetime.fromtimestamp(alert_time, tz=timezone.utc).isoformat()})
 
@@ -335,6 +375,12 @@ def update_settings(body: SettingsUpdate):
         os.environ["OPENROUTER_API_KEY"] = body.openrouter_api_key
     if body.wiggle_room_hours is not None:
         database.set_setting("wiggle_room_hours", str(body.wiggle_room_hours))
+    if body.telegram_bot_token is not None:
+        set_key(str(ENV_PATH), "TELEGRAM_BOT_TOKEN", body.telegram_bot_token)
+        os.environ["TELEGRAM_BOT_TOKEN"] = body.telegram_bot_token
+    if body.telegram_chat_id is not None:
+        set_key(str(ENV_PATH), "TELEGRAM_CHAT_ID", body.telegram_chat_id)
+        os.environ["TELEGRAM_CHAT_ID"] = body.telegram_chat_id
     return {"status": "ok"}
 
 
@@ -343,7 +389,16 @@ def read_settings():
     return {
         "canvas_base_url": os.getenv("CANVAS_BASE_URL", ""),
         "wiggle_room_hours": _get_wiggle(),
+        "telegram_configured": bool(os.getenv("TELEGRAM_BOT_TOKEN") and os.getenv("TELEGRAM_CHAT_ID")),
     }
+
+
+@app.post("/api/telegram/test")
+def test_telegram():
+    ok, err = telegram_client.send_test()
+    if ok:
+        return {"status": "ok"}
+    raise HTTPException(status_code=500, detail=err)
 
 
 @app.delete("/api/cache")

@@ -40,6 +40,12 @@ def init_db():
             course_id INTEGER PRIMARY KEY,
             hidden_at TEXT DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS telegram_sent (
+            assignment_id INTEGER PRIMARY KEY,
+            urgency TEXT,
+            sent_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     conn.commit()
     conn.close()
@@ -94,6 +100,30 @@ def set_override(assignment_id: int, hours: float):
 def clear_cache():
     conn = get_conn()
     conn.execute("DELETE FROM estimate_cache")
+    conn.commit()
+    conn.close()
+
+
+def was_telegram_sent(assignment_id: int, urgency: str) -> bool:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT urgency FROM telegram_sent WHERE assignment_id = ?", (assignment_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return False
+    urgency_order = {"within_72h": 0, "within_24h": 1, "alert_active": 2}
+    return urgency_order.get(row["urgency"], 0) >= urgency_order.get(urgency, 0)
+
+
+def mark_telegram_sent(assignment_id: int, urgency: str):
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO telegram_sent (assignment_id, urgency, sent_at)
+           VALUES (?, ?, datetime('now'))
+           ON CONFLICT(assignment_id) DO UPDATE SET urgency=excluded.urgency, sent_at=excluded.sent_at""",
+        (assignment_id, urgency),
+    )
     conn.commit()
     conn.close()
 

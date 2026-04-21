@@ -12,3 +12,5 @@ class SettingsUpdate(BaseModel):
     canvas_api_token: Optional[str] = None
     openrouter_api_key: Optional[str] = None
     wiggle_room_hours: Optional[float] = None
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
