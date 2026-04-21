@@ -13,6 +13,15 @@ def _api_key():
     return os.getenv("OPENROUTER_API_KEY", "")
 
 
+def _parse_duration(text: str) -> float | None:
+    """Parse NhNmNs format (e.g. '2h30m0s') into decimal hours."""
+    match = re.fullmatch(r"(\d+)h(\d+)m(\d+)s", text.strip())
+    if match:
+        h, m, s = int(match.group(1)), int(match.group(2)), int(match.group(3))
+        return round(h + m / 60 + s / 3600, 2)
+    return None
+
+
 def estimate_hours(assignment_name: str, description: str, points: float) -> tuple[float | None, str]:
     key = _api_key()
     if not key:
@@ -20,8 +29,12 @@ def estimate_hours(assignment_name: str, description: str, points: float) -> tup
 
     prompt = (
         "You are an academic assistant. Estimate how many hours a typical college student "
-        "would need to complete this assignment. Respond with ONLY a single number, no words "
-        "(e.g. 2 or 2.5).\n\n"
+        "would need to complete this assignment.\n"
+        "RULES:\n"
+        "- Reply with ONLY a duration in the format: NhNmNs\n"
+        "- N must be a non-negative integer, no spaces, no other text\n"
+        "- Examples of valid replies: 2h0m0s   0h45m0s   1h30m0s\n"
+        "- Do NOT write anything else — not a word, not a period, nothing\n\n"
         f"Assignment: {assignment_name}\n"
         f"Points: {points}\n"
         f"Description: {description[:800] if description else 'No description provided.'}"
@@ -38,7 +51,7 @@ def estimate_hours(assignment_name: str, description: str, points: float) -> tup
                 json={
                     "model": MODEL,
                     "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 32,
+                    "max_tokens": 16,
                     "temperature": 0.1,
                 },
             )
@@ -56,11 +69,11 @@ def estimate_hours(assignment_name: str, description: str, points: float) -> tup
 
             logger.info("OpenRouter response for %r: %r", assignment_name, content)
 
-            match = re.search(r"\d+(\.\d+)?", content)
-            if match:
-                return float(match.group()), ""
+            hours = _parse_duration(content)
+            if hours is not None:
+                return hours, ""
 
-            msg = f"No number in response: {content!r}"
+            msg = f"Unexpected format: {content!r}"
             logger.warning("Parse failed for %r — %s", assignment_name, msg)
             return None, msg
 
@@ -74,7 +87,6 @@ def estimate_hours(assignment_name: str, description: str, points: float) -> tup
 
 
 def test_connection() -> dict:
-    """Sends a trivial prompt and returns the raw response for diagnosis."""
     key = _api_key()
     if not key:
         return {"ok": False, "error": "OPENROUTER_API_KEY is not set"}
@@ -89,8 +101,14 @@ def test_connection() -> dict:
                 },
                 json={
                     "model": MODEL,
-                    "messages": [{"role": "user", "content": "Respond with only the number 3"}],
-                    "max_tokens": 32,
+                    "messages": [{
+                        "role": "user",
+                        "content": (
+                            "Reply with ONLY a duration in the format NhNmNs (e.g. 2h30m0s). "
+                            "No other text. Estimate: a short 10-question quiz."
+                        ),
+                    }],
+                    "max_tokens": 16,
                     "temperature": 0.1,
                 },
             )
@@ -99,13 +117,12 @@ def test_connection() -> dict:
             content = (data.get("choices", [{}])[0]
                        .get("message", {})
                        .get("content") or "").strip()
-            match = re.search(r"\d+(\.\d+)?", content)
+            hours = _parse_duration(content)
             return {
-                "ok": match is not None,
+                "ok": hours is not None,
                 "raw_content": content,
-                "parsed_number": float(match.group()) if match else None,
+                "parsed_hours": hours,
                 "model": MODEL,
-                "full_response": data,
             }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}

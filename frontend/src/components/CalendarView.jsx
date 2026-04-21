@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { formatDuration } from '../utils'
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, format, isSameMonth, isSameDay,
@@ -150,7 +151,7 @@ export default function CalendarView({ assignments }) {
               <div className="flex justify-between">
                 <span className="text-gray-400">AI estimate</span>
                 <span className="font-medium text-blue-700">
-                  {selected.estimated_hours != null ? `${selected.estimated_hours}h` : 'Unknown'}
+                  {selected.estimated_hours != null ? formatDuration(selected.estimated_hours) : 'Unknown'}
                   {selected.estimate_source === 'manual' && <span className="text-xs text-purple-500 ml-1">(manual)</span>}
                 </span>
               </div>

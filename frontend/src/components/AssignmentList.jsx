@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { format, parseISO, isPast } from 'date-fns'
+import { formatDuration } from '../utils'
 
 const STATUS_BADGE = {
   submitted: 'bg-green-100 text-green-800',
@@ -124,7 +125,7 @@ export default function AssignmentList({ assignments, courses, onOverride }) {
                   <span className="text-xs text-gray-500">Time estimate:</span>
                   {a.estimated_hours != null ? (
                     <span className={`text-sm font-semibold ${a.estimate_source === 'manual' ? 'text-purple-700' : 'text-blue-700'}`}>
-                      {a.estimated_hours}h
+                      {formatDuration(a.estimated_hours)}
                       {a.estimate_source === 'manual' && <span className="text-xs font-normal ml-1 text-purple-400">(manual)</span>}
                     </span>
                   ) : (
