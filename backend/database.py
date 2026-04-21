@@ -98,6 +98,16 @@ def clear_cache():
     conn.close()
 
 
+def get_cache_stats() -> dict:
+    conn = get_conn()
+    total = conn.execute("SELECT COUNT(*) FROM estimate_cache").fetchone()[0]
+    cached = conn.execute("SELECT COUNT(*) FROM estimate_cache WHERE hours IS NOT NULL").fetchone()[0]
+    pending = conn.execute("SELECT COUNT(*) FROM estimate_cache WHERE hours IS NULL").fetchone()[0]
+    overrides = conn.execute("SELECT COUNT(*) FROM manual_overrides").fetchone()[0]
+    conn.close()
+    return {"total_cached": total, "with_estimate": cached, "pending_retry": pending, "manual_overrides": overrides}
+
+
 def hide_course(course_id: int):
     conn = get_conn()
     conn.execute(

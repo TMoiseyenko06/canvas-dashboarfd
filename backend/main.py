@@ -367,3 +367,8 @@ def debug_canvas():
 @app.get("/api/debug/openrouter")
 def debug_openrouter():
     return openrouter_client.test_connection()
+
+
+@app.get("/api/debug/cache")
+def debug_cache():
+    return database.get_cache_stats()
