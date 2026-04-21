@@ -14,11 +14,19 @@ def _api_key():
 
 
 def _parse_duration(text: str) -> float | None:
-    """Parse NhNmNs format (e.g. '2h30m0s') into decimal hours."""
-    match = re.fullmatch(r"(\d+)h(\d+)m(\d+)s", text.strip())
+    """
+    Parse a duration string into decimal hours.
+    Takes only the first whitespace token so trailing comments are ignored.
+    Handles: NhNmNs, NhNm, NdNhNm, NdNhNmNs
+    """
+    token = text.strip().split()[0] if text.strip() else ""
+    match = re.match(r"(?:(\d+)d)?(\d+)h(\d+)m(?:(\d+)s)?$", token)
     if match:
-        h, m, s = int(match.group(1)), int(match.group(2)), int(match.group(3))
-        return round(h + m / 60 + s / 3600, 2)
+        d = int(match.group(1) or 0)
+        h = int(match.group(2))
+        m = int(match.group(3))
+        s = int(match.group(4) or 0)
+        return round(d * 24 + h + m / 60 + s / 3600, 2)
     return None
 
 
