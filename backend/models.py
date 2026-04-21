@@ -7,6 +7,14 @@ class EstimateOverride(BaseModel):
     hours: float
 
 
+class CourseCredits(BaseModel):
+    credits: float
+
+
+class AssignmentNote(BaseModel):
+    note: str
+
+
 class SettingsUpdate(BaseModel):
     canvas_base_url: Optional[str] = None
     canvas_api_token: Optional[str] = None

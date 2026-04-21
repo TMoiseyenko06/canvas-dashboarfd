@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 from backend import canvas_client, openrouter_client, database, scheduler, telegram_client
-from backend.models import EstimateOverride, SettingsUpdate
+from backend.models import EstimateOverride, SettingsUpdate, CourseCredits, AssignmentNote
 
 app = FastAPI(title="Canvas Dashboard API")
 
@@ -427,3 +427,90 @@ def debug_openrouter():
 @app.get("/api/debug/cache")
 def debug_cache():
     return database.get_cache_stats()
+
+
+# ── GPA ───────────────────────────────────────────────────────────────────────
+
+GRADE_POINTS = {
+    "A+": 4.0, "A": 4.0, "A-": 3.7,
+    "B+": 3.3, "B": 3.0, "B-": 2.7,
+    "C+": 2.3, "C": 2.0, "C-": 1.7,
+    "D+": 1.3, "D": 1.0, "D-": 0.7,
+    "F": 0.0,
+}
+
+
+def _score_to_letter(score: float) -> str:
+    if score >= 97: return "A+"
+    if score >= 93: return "A"
+    if score >= 90: return "A-"
+    if score >= 87: return "B+"
+    if score >= 83: return "B"
+    if score >= 80: return "B-"
+    if score >= 77: return "C+"
+    if score >= 73: return "C"
+    if score >= 70: return "C-"
+    if score >= 67: return "D+"
+    if score >= 63: return "D"
+    if score >= 60: return "D-"
+    return "F"
+
+
+@app.get("/api/gpa")
+def get_gpa():
+    credits_map = database.get_all_course_credits()
+    hidden = database.get_hidden_course_ids()
+    rows = []
+    total_points = 0.0
+    total_credits = 0.0
+
+    for c in _course_cache:
+        if c["id"] in hidden:
+            continue
+        score = c.get("calculated_score") or c.get("current_score") or c.get("final_score")
+        grade = c.get("current_grade") or c.get("final_grade")
+        credits = credits_map.get(c["id"])
+
+        letter = grade if grade and grade.upper() in GRADE_POINTS else (
+            _score_to_letter(float(score)) if score is not None else None
+        )
+        gp = GRADE_POINTS.get(letter.upper(), None) if letter else None
+
+        if gp is not None and credits:
+            total_points += gp * credits
+            total_credits += credits
+
+        rows.append({
+            "id": c["id"],
+            "name": c["name"],
+            "course_code": c.get("course_code", ""),
+            "score": score,
+            "letter": letter,
+            "grade_points": gp,
+            "credits": credits,
+        })
+
+    return {
+        "courses": rows,
+        "gpa": round(total_points / total_credits, 3) if total_credits > 0 else None,
+        "total_credits": total_credits,
+    }
+
+
+@app.post("/api/courses/{course_id}/credits")
+def set_credits(course_id: int, body: CourseCredits):
+    database.set_course_credits(course_id, body.credits)
+    return {"status": "ok"}
+
+
+# ── Assignment notes ──────────────────────────────────────────────────────────
+
+@app.get("/api/assignments/{assignment_id}/note")
+def get_note(assignment_id: int):
+    return {"note": database.get_assignment_note(assignment_id)}
+
+
+@app.post("/api/assignments/{assignment_id}/note")
+def save_note(assignment_id: int, body: AssignmentNote):
+    database.set_assignment_note(assignment_id, body.note)
+    return {"status": "ok"}

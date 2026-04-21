@@ -41,6 +41,17 @@ def init_db():
             hidden_at TEXT DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS course_credits (
+            course_id INTEGER PRIMARY KEY,
+            credits REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS assignment_notes (
+            assignment_id INTEGER PRIMARY KEY,
+            note TEXT,
+            updated_at TEXT DEFAULT (datetime('now'))
+        );
+
         CREATE TABLE IF NOT EXISTS telegram_sent (
             assignment_id INTEGER PRIMARY KEY,
             urgency TEXT,
@@ -100,6 +111,48 @@ def set_override(assignment_id: int, hours: float):
 def clear_cache():
     conn = get_conn()
     conn.execute("DELETE FROM estimate_cache")
+    conn.commit()
+    conn.close()
+
+
+def get_course_credits(course_id: int) -> float | None:
+    conn = get_conn()
+    row = conn.execute("SELECT credits FROM course_credits WHERE course_id = ?", (course_id,)).fetchone()
+    conn.close()
+    return row["credits"] if row else None
+
+
+def set_course_credits(course_id: int, credits: float):
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO course_credits (course_id, credits) VALUES (?, ?) ON CONFLICT(course_id) DO UPDATE SET credits=excluded.credits",
+        (course_id, credits),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_all_course_credits() -> dict[int, float]:
+    conn = get_conn()
+    rows = conn.execute("SELECT course_id, credits FROM course_credits").fetchall()
+    conn.close()
+    return {r["course_id"]: r["credits"] for r in rows}
+
+
+def get_assignment_note(assignment_id: int) -> str:
+    conn = get_conn()
+    row = conn.execute("SELECT note FROM assignment_notes WHERE assignment_id = ?", (assignment_id,)).fetchone()
+    conn.close()
+    return row["note"] if row else ""
+
+
+def set_assignment_note(assignment_id: int, note: str):
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO assignment_notes (assignment_id, note, updated_at) VALUES (?, ?, datetime('now'))
+           ON CONFLICT(assignment_id) DO UPDATE SET note=excluded.note, updated_at=excluded.updated_at""",
+        (assignment_id, note),
+    )
     conn.commit()
     conn.close()
 
