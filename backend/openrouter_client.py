@@ -37,7 +37,7 @@ def estimate_hours(assignment_name: str, description: str, points: float) -> tup
         "- Do NOT write anything else — not a word, not a period, nothing\n\n"
         f"Assignment: {assignment_name}\n"
         f"Points: {points}\n"
-        f"Description: {description[:800] if description else 'No description provided.'}"
+        f"Description: {description[:3000] if description else 'No description provided.'}"
     )
     try:
         with httpx.Client(timeout=30) as client:
