@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-MODEL = "mistralai/mistral-7b-instruct"
+MODEL = "mistralai/mistral-7b-instruct:free"
 
 
 def _api_key():
