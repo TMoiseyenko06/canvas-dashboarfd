@@ -92,6 +92,21 @@ export default function App() {
     prevSyncing.current = syncing
   }, [syncing, reloadCourses, reloadAssignments, reloadAlerts])
 
+  const [refreshing, setRefreshing] = useState(false)
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    await fetch('/api/sync', { method: 'POST' })
+    // poll until sync finishes then reload data
+    const poll = async () => {
+      const s = await fetch('/api/status').then(r => r.json()).catch(() => ({ syncing: false }))
+      if (s.syncing) { setTimeout(poll, 1000); return }
+      await reloadCourses(); await reloadAssignments(); await reloadAlerts()
+      setRefreshing(false)
+    }
+    setTimeout(poll, 800)
+  }
+
   async function handleHide(courseId) {
     await fetch(`/api/courses/${courseId}/hide`, { method: 'POST' })
     await reloadCourses(); await reloadAssignments(); await reloadAlerts()
@@ -131,9 +146,17 @@ export default function App() {
                 </button>
               ))}
             </nav>
+            {/* Refresh */}
+            <button onClick={handleRefresh} disabled={refreshing || syncing}
+              title="Re-sync Canvas data"
+              className="ml-2 p-2 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-colors disabled:opacity-40">
+              <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 ${refreshing || syncing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
             {/* Dark mode toggle */}
             <button onClick={() => setDark(d => !d)}
-              className="ml-2 p-2 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-colors"
+              className="p-2 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-colors"
               title={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
               {dark ? '☀️' : '🌙'}
             </button>
