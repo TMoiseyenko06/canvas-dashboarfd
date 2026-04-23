@@ -419,6 +419,12 @@ def debug_canvas():
     return canvas_client.debug_raw_courses()
 
 
+@app.get("/api/debug/all-courses")
+def debug_all_courses():
+    """All courses from Canvas with workflow_state — shows what gets filtered."""
+    return canvas_client.debug_all_courses()
+
+
 @app.get("/api/debug/openrouter")
 def debug_openrouter():
     return openrouter_client.test_connection()

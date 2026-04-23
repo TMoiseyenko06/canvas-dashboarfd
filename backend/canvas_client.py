@@ -51,17 +51,15 @@ def _parse_link_header(link_header: str) -> dict:
     return links
 
 
+# States we exclude — "available" and "unpublished" are kept
+_EXCLUDED_STATES = {"completed", "deleted"}
+
+
 def get_courses() -> list[dict]:
-    """
-    Fetch courses the user is enrolled in. Uses progressively simpler requests
-    because some Canvas instances 500 on include[] params.
-    """
     base_url, _ = _get_config()
     attempts = [
-        # Try with grade info inline
-        [("include[]", "total_scores"), ("per_page", "50")],
-        # Bare minimum — just list courses, grades fetched separately
-        [("per_page", "50")],
+        [("include[]", "total_scores"), ("per_page", "100")],
+        [("per_page", "100")],
     ]
     last_exc = None
     for params in attempts:
@@ -70,7 +68,7 @@ def get_courses() -> list[dict]:
             return [
                 c for c in courses
                 if isinstance(c, dict)
-                and c.get("workflow_state") not in ("completed", "deleted")
+                and c.get("workflow_state") not in _EXCLUDED_STATES
             ]
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code >= 500:
@@ -81,15 +79,10 @@ def get_courses() -> list[dict]:
 
 
 def get_self_enrollments() -> list[dict]:
-    """
-    All of the current user's student enrollments with grade info.
-    Returns enrollment objects with a 'grades' key containing
-    current_score, current_grade, final_score, final_grade.
-    """
     base_url, _ = _get_config()
     return _paginate(
         f"{base_url}/api/v1/users/self/enrollments",
-        params=[("type[]", "StudentEnrollment"), ("per_page", "50")],
+        params=[("type[]", "StudentEnrollment"), ("per_page", "100")],
     )
 
 
@@ -108,13 +101,28 @@ def get_assignments(course_id: int) -> list[dict]:
         params=[
             ("include[]", "submission"),
             ("order_by", "due_at"),
-            ("per_page", "50"),
+            ("per_page", "100"),
         ],
     )
 
 
+def debug_all_courses() -> list[dict]:
+    """Every course Canvas returns, unfiltered, with id/name/workflow_state."""
+    base_url, _ = _get_config()
+    courses = _paginate(f"{base_url}/api/v1/courses", params=[("per_page", "100")])
+    return [
+        {
+            "id": c.get("id"),
+            "name": c.get("name"),
+            "course_code": c.get("course_code"),
+            "workflow_state": c.get("workflow_state"),
+            "filtered_out": c.get("workflow_state") in _EXCLUDED_STATES,
+        }
+        for c in courses if isinstance(c, dict)
+    ]
+
+
 def debug_raw_courses() -> dict:
-    """Returns raw API response for diagnosing Canvas issues."""
     base_url, _ = _get_config()
     results = {}
     with httpx.Client(headers=_headers(), timeout=30) as client:
