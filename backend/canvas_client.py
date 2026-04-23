@@ -5,6 +5,12 @@ import os
 def _get_config():
     base_url = os.getenv("CANVAS_BASE_URL", "").rstrip("/")
     token = os.getenv("CANVAS_API_TOKEN", "")
+    if not base_url:
+        raise ValueError("CANVAS_BASE_URL is not set — add it in Settings.")
+    if not token:
+        raise ValueError("CANVAS_API_TOKEN is not set — add it in Settings.")
+    if not base_url.startswith("http"):
+        raise ValueError(f"CANVAS_BASE_URL must start with https:// (got: {base_url!r})")
     return base_url, token
 
 
